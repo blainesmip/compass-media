@@ -9,10 +9,10 @@ A debug overlay (boxes for tag, badge, headline, faces) is saved for a visual ch
 """
 import sys, numpy as np, cv2
 from PIL import Image, ImageDraw
-sys.path.insert(0, __import__("os").path.dirname(__file__))
+sys.path.insert(0, "/home/claude/scripts")
 from pop_cover import *
 
-DET = cv2.FaceDetectorYN.create("" + __import__("os").path.join(__import__("os").path.dirname(__file__), "yunet.onnx") + "", "", (320, 320), 0.5)
+DET = cv2.FaceDetectorYN.create("yunet.onnx", "", (320, 320), 0.5)
 TAG_BOX = (60, 60, 220, 150)
 BADGE_BOX = (1080 - 243 - 45, 55, 1080 - 45, 298)
 
@@ -43,40 +43,48 @@ def face_of(cut):
 def headline_top(n_lines):
     return 880 if n_lines >= 3 else 1000
 
-def plan(cuts, n_lines, badge=False, face_h=400, gap=25):
-    """Places each person so the WHOLE HEAD (hair/hood to chin) sits between the tag and the headline,
-    clear of the badge, as big as the zone allows (face up to face_h px), heads level."""
+FILL = dict(solo_face_max=560, duo_face_max=470, max_upscale=3.2)
+
+def plan(cuts, n_lines, gap=25):
+    """FILL THE FRAME. Each head (hair/hood to chin) is scaled to fill the zone between the tag and
+    the headline and its top is pinned just under the tag, so there is no dead space above heads.
+    Solo: head fills the zone (face up to 560px). Duo: same face size for both (up to 470px), both
+    head tops pinned to the zone top. Silhouettes (hoods, masks) use the head outline instead of a face.
+    Badges never push people down: people are placed first, the badge goes where heads aren't."""
     safe_top = TAG_BOX[3] + 20
     safe_bot = headline_top(n_lines) - gap
+    zone = safe_bot - safe_top
+    fx = [face_of(c) for c, _ in cuts]
+    cap = FILL["solo_face_max"] if len(cuts) == 1 else FILL["duo_face_max"]
+    scales = [min(zone / (chin - htop), cap / h if how == "detected" else 9, FILL["max_upscale"]) for (cx, cy, h, htop, chin, how) in fx]
+    if len(cuts) > 1:   # level: same on-screen face size for everyone
+        th = min(s * f[2] for s, f in zip(scales, fx))
+        scales = [th / f[2] for f in fx]
     out = []
-    for cut, xc in cuts:
-        cx, cy, h, htop, chin, how = face_of(cut)
-        top_lim = safe_top
-        s = face_h / h
-        if badge and xc + (cx - (cx - h)) * s * 0.6 > BADGE_BOX[0]:
-            top_lim = max(top_lim, BADGE_BOX[3] + 15)
-        head_span = chin - htop
-        s = min(s, (safe_bot - top_lim) / head_span)
-        # centre the head (hair to chin) in the available zone
-        head_mid_target = (top_lim + safe_bot) / 2
-        cy_target = head_mid_target + (cy - (htop + chin) / 2) * s
-        out.append(dict(face_src=(cx, cy), face_h_src=h, target=(xc, cy_target), target_h=h * s, how=how,
-                        head_top=head_mid_target - head_span * s / 2, top_lim=top_lim))
-    if len(out) > 1:   # level heads: align head tops to the lowest one, same face size
-        th = min(o["target_h"] for o in out)
-        for o in out:
-            sc = th / o["face_h_src"]; o["target_h"] = th
-        ht = max(o["top_lim"] for o in out)
-        for (cut, xc), o in zip(cuts, out):
-            cx, cy, h, htop, chin, how = face_of(cut); sc = o["target_h"] / h
-            span = (chin - htop) * sc; mid = (ht + safe_bot) / 2
-            o["target"] = (o["target"][0], mid + (cy - (htop + chin) / 2) * sc)
+    for (cut, xc), (cx, cy, h, htop, chin, how), s in zip(cuts, fx, scales):
+        cy_t = safe_top + (cy - htop) * s
+        fw = h * s * 0.8
+        out.append(dict(face_src=(cx, cy), face_h_src=h, target=(xc, cy_t), target_h=h * s, how=how, scale=s,
+                        face_box=(xc - fw / 2 - 25, cy_t - h * s / 2 - 25, xc + fw / 2 + 25, cy_t + h * s / 2 + 25),
+                        head_box=(xc - fw * 0.75, safe_top, xc + fw * 0.75, safe_top + (chin - htop) * s)))
     return out
 
-def verify(cover_rgb, n_lines, badge=False, expected=1, debug_path=None):
+BADGE_SPOTS = lambda hl: [("top-right", (792, 55)), ("low-right", (792, hl - 290)), ("low-left", (45, hl - 290))]
+
+def badge_spot(face_boxes, n_lines, size=243):
+    """First badge spot that touches no FACE (it may sit over hair, shoulders or background);
+    otherwise the spot with the least face overlap (verify() will then flag it)."""
+    def ov(a, b):
+        w = max(0, min(a[2], b[2]) - max(a[0], b[0])); h = max(0, min(a[3], b[3]) - max(a[1], b[1])); return w * h
+    for name, (x, y) in BADGE_SPOTS(headline_top(n_lines)):
+        bb = (x, y, x + size, y + size); o = sum(ov(bb, hb) for hb in face_boxes)
+        if o == 0: return name, (x, y)
+    return "top-right (person dropped)", BADGE_SPOTS(0)[0][1]
+
+def verify(cover_rgb, n_lines, badge_box=None, expected=1, debug_path=None, solo=True):
     faces = detect_faces(cover_rgb)
     hl_top = headline_top(n_lines); issues = []
-    boxes = [("tag", TAG_BOX), ("headline", (40, hl_top, 1040, 1320))] + ([("badge", BADGE_BOX)] if badge else [])
+    boxes = [("tag", TAG_BOX), ("headline", (40, hl_top, 1040, 1320))] + ([("badge", badge_box)] if badge_box else [])
     def ov(a, b): return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
     lums = []
     for x, y, w, h, sc in faces:
@@ -84,7 +92,7 @@ def verify(cover_rgb, n_lines, badge=False, expected=1, debug_path=None):
         for name, b in boxes:
             if ov(fb, b): issues.append(f"face at y{int(y)} overlaps {name}")
         if y < 0 or y + h > 1350 or x < 0 or x + w > 1080: issues.append("face cut off by frame")
-        if h < 200: issues.append(f"face too small ({int(h)}px)")
+        if h < (300 if solo else 260): issues.append(f"face too small ({int(h)}px) - fill the frame")
         z = np.asarray(cover_rgb.convert("RGB")).astype(np.float32)[int(y + h*.2):int(y + h*.85), int(x + w*.2):int(x + w*.8)]
         L = 0.299*z[...,0] + 0.587*z[...,1] + 0.114*z[...,2]
         hi, lo = np.percentile(L, 95), np.percentile(L, 5)
@@ -105,20 +113,33 @@ def verify(cover_rgb, n_lines, badge=False, expected=1, debug_path=None):
         d.resize((432, 540)).save(debug_path)
     return faces, issues
 
-def build(bg, people, lines, accent, tag_text="NEWS", badge_img=None, out=None, debug=None, face_h=400):
-    """people: list of dict(cut=Image, x=centre_x, grade=dict). Returns (cover, issues)."""
+def build(bg, people, lines, accent, tag_text="NEWS", badge_img=None, out=None, debug=None):
+    """people: list of dict(cut=Image, x=centre_x, grade=dict, z=layer). Returns (cover, issues, plan, badge_spot)."""
     n = len(lines); canvas = bg.copy()
-    p = plan([(pp["cut"], pp["x"]) for pp in people], n, badge=badge_img is not None, face_h=face_h)
+    p = plan([(pp["cut"], pp["x"]) for pp in people], n)
+    bpos = spot = None
+    if badge_img is not None:
+        bs = badge_img.size[0]
+        spot, bpos = badge_spot([pl["face_box"] for pl in p], n, bs)
+        bb = (bpos[0], bpos[1], bpos[0] + bs, bpos[1] + bs)
+        for pl in p:   # no free spot: the badge takes the corner and that person drops just below it (max 140px)
+            fb = pl["face_box"]
+            if not (fb[2] <= bb[0] or fb[0] >= bb[2] or fb[3] <= bb[1] or fb[1] >= bb[3]):
+                d = min(140, bb[3] + 5 - fb[1])
+                pl["target"] = (pl["target"][0], pl["target"][1] + d)
+                pl["face_box"] = (fb[0], fb[1] + d, fb[2], fb[3] + d); pl["dropped_for_badge"] = d
     for pp, pl in sorted(zip(people, p), key=lambda t: t[0].get("z", 0)):
         canvas = place_outlined(canvas, pp["cut"], pl["face_src"], pl["face_h_src"], pl["target"], pl["target_h"],
                                 grade_kw=pp.get("grade"))
-    if badge_img is not None: canvas.alpha_composite(badge_img, (BADGE_BOX[0], BADGE_BOX[1]))
+    bbox = None
+    if badge_img is not None:
+        bx, by = bpos; canvas.alpha_composite(badge_img, (bx, by)); bbox = (bx, by, bx + badge_img.size[0], by + badge_img.size[1])
     canvas = bottom_gradient(canvas)
     cols = [MINT if i in accent else (255, 255, 255) for i in range(n)]
-    canvas, _ = headline(canvas, lines, __import__("os").path.join(__import__("os").path.dirname(__file__), "anton.ttf"), 124 if n >= 3 else 136, headline_top(n), cols, line_gap=1.02, max_w=940)
-    if tag_text: canvas = tag(canvas, tag_text, __import__("os").path.join(__import__("os").path.dirname(__file__), "anton.ttf"))
-    canvas = mark(canvas, __import__("os").path.join(__import__("os").path.dirname(__file__), "compass_white.png"))
-    faces, issues = verify(canvas, n, badge=badge_img is not None,
+    canvas, _ = headline(canvas, lines, "anton.ttf", 124 if n >= 3 else 136, headline_top(n), cols, line_gap=1.02, max_w=940)
+    if tag_text: canvas = tag(canvas, tag_text, "anton.ttf")
+    canvas = mark(canvas, "compass_white.png")
+    faces, issues = verify(canvas, n, badge_box=bbox, solo=len(people) == 1,
                            expected=sum(1 for pl in p if pl["how"] == "detected"), debug_path=debug)
     if out: canvas.convert("RGB").save(out, quality=95)
-    return canvas, issues, p
+    return canvas, issues, p, spot
