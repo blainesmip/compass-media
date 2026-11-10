@@ -113,7 +113,26 @@ def verify(cover_rgb, n_lines, badge_box=None, expected=1, debug_path=None, solo
         d.resize((432, 540)).save(debug_path)
     return faces, issues
 
-def build(bg, people, lines, accent, tag_text="NEWS", badge_img=None, out=None, debug=None):
+import os, enhance as _enh
+SR_ABOVE = 1.8
+SR_MIX = 0.5
+
+def _sr_visible(cut, fsrc, fh, pl, name=None):
+    """Super-resolve only the part of the cut-out that lands on the canvas (cached)."""
+    s = pl["target_h"] / fh; (xc, yc) = pl["target"]; cx, cy = fsrc
+    x0 = int(max(0, cx + (0 - xc) / s - 20)); x1 = int(min(cut.size[0], cx + (1080 - xc) / s + 20))
+    y0 = int(max(0, cy + (0 - yc) / s - 20)); y1 = int(min(cut.size[1], cy + (1350 - yc) / s + 20))
+    key = f"sr_cache/{name or id(cut)}_{x0}_{y0}_{x1}_{y1}.png"
+    if name and os.path.exists(key): big = Image.open(key)
+    else:
+        big = _enh.sr_rgba(cut.crop((x0, y0, x1, y1)))
+        if name: os.makedirs(os.path.dirname(key), exist_ok=True); big.save(key)
+    # 50/50 with a plain resize: keeps real skin texture so it never looks AI-painted
+    plain = cut.crop((x0, y0, x1, y1)).resize(big.size, Image.LANCZOS)
+    big = Image.blend(plain.convert("RGBA"), big.convert("RGBA"), SR_MIX); big.putalpha(plain.getchannel("A"))
+    return big, ((cx - x0) * 4, (cy - y0) * 4), fh * 4
+
+def build(bg, people, lines, accent, tag_text="NEWS", badge_img=None, out=None, debug=None, enhance=True):
     """people: list of dict(cut=Image, x=centre_x, grade=dict, z=layer). Returns (cover, issues, plan, badge_spot)."""
     n = len(lines); canvas = bg.copy()
     p = plan([(pp["cut"], pp["x"]) for pp in people], n)
@@ -129,8 +148,11 @@ def build(bg, people, lines, accent, tag_text="NEWS", badge_img=None, out=None, 
                 pl["target"] = (pl["target"][0], pl["target"][1] + d)
                 pl["face_box"] = (fb[0], fb[1] + d, fb[2], fb[3] + d); pl["dropped_for_badge"] = d
     for pp, pl in sorted(zip(people, p), key=lambda t: t[0].get("z", 0)):
-        canvas = place_outlined(canvas, pp["cut"], pl["face_src"], pl["face_h_src"], pl["target"], pl["target_h"],
-                                grade_kw=pp.get("grade"))
+        cut, fsrc, fh = pp["cut"], pl["face_src"], pl["face_h_src"]
+        if enhance and pl["scale"] > SR_ABOVE:      # enlarged a lot: rebuild detail with 4x super-resolution
+            cut, fsrc, fh = _sr_visible(cut, fsrc, fh, pl, pp.get("name"))
+        if enhance: cut = _enh.pop(cut, strength=pp.get("pop", 1.0))
+        canvas = place_outlined(canvas, cut, fsrc, fh, pl["target"], pl["target_h"], grade_kw=pp.get("grade"))
     bbox = None
     if badge_img is not None:
         bx, by = bpos; canvas.alpha_composite(badge_img, (bx, by)); bbox = (bx, by, bx + badge_img.size[0], by + badge_img.size[1])
