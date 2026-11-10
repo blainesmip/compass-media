@@ -63,6 +63,10 @@ def plan(cuts, n_lines, gap=25):
     out = []
     for (cut, xc), (cx, cy, h, htop, chin, how), s in zip(cuts, fx, scales):
         cy_t = safe_top + (cy - htop) * s
+        a = np.array(cut.getchannel("A")) > 128
+        x0c, x1c = int(max(0, cx - h * 0.4)), int(min(a.shape[1], cx + h * 0.4))
+        if a[:3, x0c:x1c].any():     # head cropped by the source frame: bleed it off the top, never show a flat edge
+            cy_t = (cy - htop) * s - 4
         fw = h * s * 0.8
         out.append(dict(face_src=(cx, cy), face_h_src=h, target=(xc, cy_t), target_h=h * s, how=how, scale=s,
                         face_box=(xc - fw / 2 - 25, cy_t - h * s / 2 - 25, xc + fw / 2 + 25, cy_t + h * s / 2 + 25),
