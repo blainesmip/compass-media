@@ -10,7 +10,8 @@ p.add_argument("--blurband", default=None, help="y0:y1 in output px")
 p.add_argument("--font", default="RobotoCond-800i.ttf")
 p.add_argument("--logo", default="compass_white.png")
 p.add_argument("--fs", type=int, default=69)
-p.add_argument("--top", type=int, default=1066, help="cap top of first headline line")
+p.add_argument("--top", type=int, default=None, help="cap top of first headline line (default: block centred on the frame)")
+p.add_argument("--handle_y", type=int, default=1480, help="centre of handle + star, just above TikTok's caption area")
 p.add_argument("--overlay", default="tt_overlay.png")
 a = p.parse_args(); W, H = 1080, 1920
 if len(a.lines) > 3: raise SystemExit("max 3 headline lines")
@@ -23,6 +24,7 @@ def text_layer(items):
         dt.text((x, y), s, font=f, fill=fill, anchor="ls")
     return shadow.filter(ImageFilter.GaussianBlur(1.5)), txt
 hf = ImageFont.truetype(a.font, a.fs); cap = -hf.getbbox("H", anchor="ls")[1]; pitch = round(a.fs * 1.11)
+if a.top is None: a.top = round(H / 2 - ((len(a.lines) - 1) * pitch + cap) / 2)
 items = []; base = a.top + cap
 for i, line in enumerate(a.lines):
     if hf.getlength(line) > W - 120: raise SystemExit(f"line too wide: {line}")
@@ -30,7 +32,7 @@ for i, line in enumerate(a.lines):
 last_base = base + (len(a.lines) - 1) * pitch
 handle = "@thecompassculture"; fs_h = 40
 while ImageFont.truetype(a.font, fs_h).getlength(handle) < 288: fs_h += 1
-hfont = ImageFont.truetype(a.font, fs_h); handle_c = last_base + 68
+hfont = ImageFont.truetype(a.font, fs_h); handle_c = a.handle_y
 items.append((handle, hfont, handle_c - hfont.getbbox("h", anchor="ls")[1] / 2, (255, 255, 255, 235)))
 if a.credit:
     cfs = 26
