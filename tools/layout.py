@@ -45,7 +45,7 @@ def headline_top(n_lines):
 
 FILL = dict(solo_face_max=560, duo_face_max=470, max_upscale=3.2)
 
-def plan(cuts, n_lines, gap=25):
+def plan(cuts, n_lines, gap=25, bleed=False):
     """FILL THE FRAME. Each head (hair/hood to chin) is scaled to fill the zone between the tag and
     the headline and its top is pinned just under the tag, so there is no dead space above heads.
     Solo: head fills the zone (face up to 560px). Duo: same face size for both (up to 470px), both
@@ -65,7 +65,7 @@ def plan(cuts, n_lines, gap=25):
         cy_t = safe_top + (cy - htop) * s
         a = np.array(cut.getchannel("A")) > 128
         x0c, x1c = int(max(0, cx - h * 0.4)), int(min(a.shape[1], cx + h * 0.4))
-        if a[:3, x0c:x1c].any():     # head cropped by the source frame: bleed it off the top, never show a flat edge
+        if bleed and a[:3, x0c:x1c].any():     # opt-in: head cropped flat by the source frame -> bleed it off the top
             cy_t = (cy - htop) * s - 4
         fw = h * s * 0.8
         out.append(dict(face_src=(cx, cy), face_h_src=h, target=(xc, cy_t), target_h=h * s, how=how, scale=s,

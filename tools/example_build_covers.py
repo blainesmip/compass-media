@@ -22,9 +22,9 @@ b=ImageEnhance.Color(ImageEnhance.Contrast(b).enhance(1.1)).enhance(1.2).convert
 art=Image.open('prof/svn_pegasus_art.jpg').convert('RGB')
 G=lambda g,c=1.15,s=1.05,sh=70: dict(gamma=g,contrast=c,sat=s,sharpen=sh)
 jobs={
- 's1':dict(bg=b,people=[dict(name='cardi',cut=cardi,x=800,grade=G(0.67,1.14,1.02,90)),dict(name='travis',cut=travis,x=300,z=1,grade=G(0.9))],lines=["TRAVIS & CARDI","HEADLINE GTA VI'S","OWN FESTIVAL"],accent=[2],badge_img=fest_badge),
+ 's1':dict(bg=b,people=[dict(name='cardi',cut=cardi,x=800,grade=G(0.67,1.14,1.02,90)),dict(name='travis',cut=travis,x=300,z=1,grade=G(0.9))],lines=["TRAVIS & CARDI","HEADLINE GTA VI'S","OWN FESTIVAL"],accent=[2],badge_img=badge(Image.open('justice/rs_art_clean.jpg').convert('RGB'),(30,240,1010,1220),size=243)),
  's2':dict(bg=bg_from('bgsrc_sots_20.png',blur=14,bright=0.6,sat=1.1),people=[dict(name='bex',cut=Image.open('cut_bex2.png'),x=520,grade=G(0.8))],lines=["PRODUCER BEXBLU","JUST HIT","1 MILLION LISTENERS"],accent=[2]),
- 's3':dict(bg=bg_from('bgsrc_ddtb4.png',blur=16,bright=0.55,sat=1.15),people=[dict(name='gotit',cut=Image.open('cut_gotit.png'),x=790,grade=G(0.8,1.15,1.05,60)),dict(name='ray',cut=Image.open('cut_ray.png'),x=290,z=1,grade=G(0.58,1.3))],lines=["RAYMATIX LINKS","LIL GOTIT ON","\"DONE DIS TING B4\""],accent=[1]),
+ 's3':dict(bg=bg_from('bgsrc_ray_20.png',blur=16,bright=0.55,sat=1.15),people=[dict(name='gotit',cut=Image.open('cut_gotit.png'),x=790,grade=G(0.9,1.12,1.0,60)),dict(name='ray',cut=Image.open('cut_ray.png'),x=290,z=1,grade=G(0.5,1.3))],lines=["RAYMATIX LINKS","LIL GOTIT ON","\"DONE DIS TING B4\""],accent=[1]),
  's5':dict(bg=bg_from('prof/svn_pegasus_art.jpg',blur=6,bright=0.7,sat=1.1),people=[dict(cut=Image.open('cut_svn.png'),x=520,grade=G(0.85,1.12))],lines=["SVN4VR IS BACK","WITH \"PEGASUS\""],accent=[1],badge_img=badge(Image.open('svnpp/svn_pp.png').convert('RGB'),(205,95,505,395),size=243)),
 }
 for k,j in jobs.items():
