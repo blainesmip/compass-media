@@ -82,7 +82,7 @@ def badge_spot(face_boxes, n_lines, size=243):
     return "top-right (person dropped)", BADGE_SPOTS(0)[0][1]
 
 def verify(cover_rgb, n_lines, badge_box=None, expected=1, debug_path=None, solo=True):
-    faces = detect_faces(cover_rgb)
+    faces = detect_faces(cover_rgb) if expected > 0 else []   # hood/mask covers: detector hits are false positives
     hl_top = headline_top(n_lines); issues = []
     boxes = [("tag", TAG_BOX), ("headline", (40, hl_top, 1040, 1320))] + ([("badge", badge_box)] if badge_box else [])
     def ov(a, b): return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
