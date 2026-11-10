@@ -56,7 +56,7 @@ def plan(cuts, n_lines, gap=25):
     zone = safe_bot - safe_top
     fx = [face_of(c) for c, _ in cuts]
     cap = FILL["solo_face_max"] if len(cuts) == 1 else FILL["duo_face_max"]
-    scales = [min(zone / (chin - htop), cap / h if how == "detected" else 9, FILL["max_upscale"]) for (cx, cy, h, htop, chin, how) in fx]
+    scales = [min(zone / (chin - htop), cap / h if how == "detected" else 0.72 * zone / (chin - htop), FILL["max_upscale"]) for (cx, cy, h, htop, chin, how) in fx]
     if len(cuts) > 1:   # level: same on-screen face size for everyone
         th = min(s * f[2] for s, f in zip(scales, fx))
         scales = [th / f[2] for f in fx]
