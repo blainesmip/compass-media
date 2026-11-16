@@ -9,12 +9,14 @@ def hanger(sz,col=(255,255,255,255)):
     d.line([(cx,top+S*0.32),(S*0.06,S*0.78)],fill=col,width=w_); d.line([(cx,top+S*0.32),(S*0.94,S*0.78)],fill=col,width=w_)
     d.line([(S*0.06,S*0.78),(S*0.94,S*0.78)],fill=col,width=w_); return im.resize((sz,sz),Image.LANCZOS)
 PAD=int(28*SC); RHt=int(154*SC); HS=int(104*SC); GAP=int(22*SC)
-words=["RATE","THE","FIT"]; sp=F.getlength(" ")
-ww=[F.getlength(w) for w in words]; TW=sum(ww)+sp*2
-BW=int(PAD*2+TW+GAP+HS); BH=RHt
+words=globals().get("HOOK_WORDS",["RATE","THE","FIT"]); USE_ICON=globals().get("HOOK_ICON",True); sp=F.getlength(" ")
+ww=[F.getlength(w) for w in words]; TW=sum(ww)+sp*(len(words)-1)
+while PAD*2+TW+((GAP+HS) if USE_ICON else PAD*0.6) > 980:
+    F=ImageFont.truetype('anton.ttf',F.size-4); sp=F.getlength(" "); ww=[F.getlength(w) for w in words]; TW=sum(ww)+sp*(len(words)-1)
+BW=int(PAD*2+TW+((GAP+HS) if USE_ICON else PAD*0.6)); BH=RHt
 HANG=hanger(HS)
 def ease_out_back(x,c1=1.70158*1.4): c3=c1+1; return 1+c3*(x-1)**3+c1*(x-1)**2
-def box(words_on=3, hang_rot=0.0, hang_dy=0, hang_on=True, inv=0.0, wipe=1.0, rgb_split=0):
+def box(words_on=99, hang_rot=0.0, hang_dy=0, hang_on=True, inv=0.0, wipe=1.0, rgb_split=0):
     L=Image.new('RGBA',(BW,BH),(0,0,0,0)); d=ImageDraw.Draw(L)
     bg=tuple(int(0+(255-0)*inv) for _ in range(3)); fg=tuple(int(255-255*inv) for _ in range(3))
     d.rectangle([0,0,int(BW*wipe),BH],fill=bg+(255,))
@@ -25,7 +27,7 @@ def box(words_on=3, hang_rot=0.0, hang_dy=0, hang_on=True, inv=0.0, wipe=1.0, rg
                 d.text((x-rgb_split,BH/2+2),w,font=F,fill=(255,0,60,200),anchor='lm'); d.text((x+rgb_split,BH/2+2),w,font=F,fill=(0,220,255,200),anchor='lm')
             d.text((x,BH/2+2),w,font=F,fill=fg+(255,),anchor='lm')
         x+=ww[i]+sp
-    if hang_on:
+    if hang_on and USE_ICON:
         hg=HANG if fg==(255,255,255) else hanger(HS,fg+(255,))
         r=hg.rotate(hang_rot,resample=Image.BICUBIC,center=(HS/2,HS*0.15))
         L.alpha_composite(r,(int(PAD+TW+GAP),int((BH-HS)/2+hang_dy)))
@@ -77,6 +79,19 @@ def E(t):  # SLAM + double invert flash, shorter
         s=1; a=1; k=math.exp(-(t-0.14)*14); dx=10*k*math.sin(t*90); dy=8*k*math.cos(t*77)
     inv=1.0 if (0.26<=t<0.30 or 0.35<=t<0.39) else 0.0
     place(ov,box(inv=inv,hang_rot=swing(max(0,t-0.14))),s,s,dx,dy,a); return ov
+def rows_box(rows):
+    rs=globals().get('ROW_SCALE'); f=ImageFont.truetype('anton.ttf',int(130*rs)) if rs else F; lh=int(154*rs) if rs else RHt; g=int(10*(rs or SC))
+    pad=int(28*(rs or SC))
+    while max(f.getlength(r) for r in rows)+pad*2>980: f=ImageFont.truetype('anton.ttf',f.size-4)
+    ws=[f.getlength(r)+pad*2 for r in rows]; Wm=int(max(ws)); L=Image.new('RGBA',(Wm,lh*len(rows)+g*(len(rows)-1)),(0,0,0,0)); d=ImageDraw.Draw(L)
+    for i,r in enumerate(rows):
+        x0=(Wm-ws[i])/2; y=i*(lh+g); d.rectangle([x0,y,x0+ws[i],y+lh],fill=(0,0,0,255)); d.text((Wm/2,y+lh/2+2),r,font=f,fill=(255,255,255,255),anchor='mm')
+    return L
+def PLAIN(t):  # plain: black box(es) on, hold, hard cut
+    ov=Image.new('RGBA',(W,H),(0,0,0,0))
+    if t<globals().get('HOLD',1.6):
+        R_=globals().get('HOOK_ROWS') or [' '.join(words)]; place(ov,rows_box(R_),dy=globals().get('HOOK_CY',CY)-CY)
+    return ov
 V={'E_slamflash':E,'A_pop':A,'B_slam':B,'C_stagger':C,'D_flash':D}
 name=sys.argv[1]; fn=V[name]
 dec=subprocess.Popen(['ffmpeg','-v','error','-i','hook_bg.mp4','-t','3.0','-f','rawvideo','-pix_fmt','rgb24','-'],stdout=subprocess.PIPE)

@@ -40,9 +40,9 @@ def norm(t): return re.sub(r"[^a-z0-9]", "", t.lower())
 
 # ---- timeline ----
 segs = []; t_out = 0.0
-ZP = []
+ZP = []; LIFT = []
 for k, row in enumerate(SPEC["items"]):
-    s, e, cap = row[:3]; ZP.append(row[3] if len(row) > 3 else k % 2); NOSPLIT = row[4] if len(row) > 4 else False
+    s, e, cap = row[:3]; ZP.append(row[3] if len(row) > 3 else k % 2); NOSPLIT = row[4] if len(row) > 4 else False; LIFT.append(row[5] if len(row) > 5 else 0)
     raw_t = cap.split(); toks = []; BRK = set()
     for t_ in raw_t:
         if t_ == "|": BRK.add(len(toks))
@@ -130,9 +130,9 @@ for k, it in enumerate(SPEC["items"]):
 # tags on output timeline
 TAGS = []
 for tg_ in SPEC.get("tags", []):
-    ts, logo, name, handle, ver = tg_[:5]; anc = tg_[5] if len(tg_) > 5 else None; dur = tg_[6] if len(tg_) > 6 and tg_[6] else SPEC.get("tag_dur", 2.4); side = tg_[7] if len(tg_) > 7 else None
+    ts, logo, name, handle, ver = tg_[:5]; anc = tg_[5] if len(tg_) > 5 else None; dur = tg_[6] if len(tg_) > 6 and tg_[6] else SPEC.get("tag_dur", 2.4); side = tg_[7] if len(tg_) > 7 else None; fol = tg_[8] if len(tg_) > 8 else None
     to = src2out(ts)
-    if to is not None: TAGS.append(dict(t=to - 0.05, logo=logo, name=name, handle=handle, ver=ver, anchor=anc, dur=dur, side=side))
+    if to is not None: TAGS.append(dict(t=to - 0.05, logo=logo, name=name, handle=handle, ver=ver, anchor=anc, dur=dur, side=side, follow=fol))
 TAGS.sort(key=lambda x: x["t"])
 for i in range(1, len(TAGS)): TAGS[i]["t"] = max(TAGS[i]["t"], TAGS[i - 1]["t"] + 1.3)
 for i, tg in enumerate(TAGS):
@@ -244,10 +244,13 @@ def verified_badge(sz):
     return im.resize((sz, sz), Image.LANCZOS)
 VB = verified_badge(40)
 
-def make_tag(logo, name, handle, ver):
+FBTN = ImageFont.truetype("RC800.ttf", 38)
+def make_tag(logo, name, handle, ver, follow=None):
     AV = 104; padl, padr, hgt = 14, 40, 132
+    if follow: handle = handle + "  ·  " + follow
     nw = fname.getlength(name) + (52 if ver else 0); hw = fhandle.getlength(handle)
-    wd = int(padl + AV + 22 + max(nw, hw) + padr)
+    BTW = int(FBTN.getlength("Follow") + 56) if follow else 0
+    wd = int(padl + AV + 22 + max(nw, hw) + padr + (BTW + 10 if follow else 0))
     S = 3  # supersample
     card = Image.new("RGBA", (wd * S, hgt * S), (0, 0, 0, 0)); d = ImageDraw.Draw(card)
     d.rounded_rectangle([0, 0, wd * S - 1, hgt * S - 1], radius=hgt * S // 2, fill=(255, 255, 255, 250))
@@ -262,11 +265,15 @@ def make_tag(logo, name, handle, ver):
     d.text((tx, 64), name, font=fname, fill=(10, 10, 10, 255), anchor="ls")
     if ver: card.alpha_composite(VB, (int(tx + fname.getlength(name) + 10), 26))
     d.text((tx, 106), handle, font=fhandle, fill=(115, 115, 115, 255), anchor="ls")
+    if follow:
+        bx1 = wd - 30; bx0 = bx1 - BTW; by0, by1 = (hgt - 70) // 2, (hgt + 70) // 2
+        d.rounded_rectangle([bx0, by0, bx1, by1], radius=18, fill=(0, 149, 246, 255))
+        d.text(((bx0 + bx1) / 2, (by0 + by1) / 2 + 1), "Follow", font=FBTN, fill=(255, 255, 255, 255), anchor="mm")
     # soft shadow
     L = Image.new("RGBA", (wd + 80, hgt + 80), (0, 0, 0, 0))
     sh = Image.new("RGBA", L.size, (0, 0, 0, 0)); ImageDraw.Draw(sh).rounded_rectangle([40, 48, 40 + wd, 48 + hgt], radius=hgt // 2, fill=(0, 0, 0, 110))
     L = Image.alpha_composite(L, sh.filter(ImageFilter.GaussianBlur(16))); L.alpha_composite(card, (40, 40)); sc_ = SPEC.get("tag_scale", 1.0); return L.resize((int(L.width * sc_), int(L.height * sc_)), Image.LANCZOS)
-for tg in TAGS: tg["img"] = make_tag(tg["logo"], tg["name"], tg["handle"], tg["ver"])
+for tg in TAGS: tg["img"] = make_tag(tg["logo"], tg["name"], tg["handle"], tg["ver"], tg.get("follow"))
 TAG_CY = 1330
 
 def tag_state(t, tg):
@@ -286,7 +293,7 @@ EMPTY = Image.new("RGBA", (W, H), (0, 0, 0, 0))
 HOOK_FN = None
 if SPEC.get("hook_anim"):
     _src = open(SPEC.get("hook_anim_file", "hook_anims.py")).read().split("V={")[0]
-    _ns = {}; exec(_src, _ns); HOOK_FN = _ns[SPEC["hook_anim"]]
+    _ns = {"HOOK_WORDS": SPEC.get("hook_words", ["RATE", "THE", "FIT"]), "HOOK_ICON": SPEC.get("hook_icon_on", True), "HOLD": SPEC.get("hook_hold", 1.6), "HOOK_ROWS": SPEC.get("hook_rows"), "ROW_SCALE": SPEC.get("hook_row_scale"), "HOOK_CY": SPEC.get("hook_cy_px", 860)}; exec(_src, _ns); HOOK_FN = _ns[SPEC["hook_anim"]]
 def hook_layer(t):
     if HOOK_FN is not None:
         L = HOOK_FN(t)
@@ -383,6 +390,55 @@ if PREVIEW:
     _w = Image.new("RGBA", (300, 64), (0, 0, 0, 0)); _d = ImageDraw.Draw(_w)
     _d.rounded_rectangle([12, 12, 288, 56], radius=10, fill=(0, 0, 0, 160)); _d.text((150, 34), "PREVIEW · LOW RES", font=ImageFont.truetype("RC800.ttf", 24), fill=(255, 255, 255, 255), anchor="mm")
     WM = np.asarray(_w)
+# ---- b-roll: their reels full-screen, or product photos as pop-in cards over a blurred shot ----
+BROLL = []
+for b in SPEC.get("broll", []):
+    t0_, t1_ = src2out(b["s"]), src2out(b["e"] - 0.001)
+    if t0_ is None or t1_ is None: continue
+    d = dict(b); d["t0"], d["t1"] = t0_, t1_ + 0.001
+    if d["type"] == "cards": d["ims"] = [Image.open(f).convert("RGB") for f in d["files"]]
+    BROLL.append(d); print("  broll", d["type"], round(t0_, 2), round(t1_, 2), d.get("file", d.get("files")), flush=True)
+_bdec = {}
+def _video_frame(b, t):
+    key = id(b)
+    if key not in _bdec:
+        vf = f"scale={RW}:{RH}:force_original_aspect_ratio=increase:flags=lanczos,crop={RW}:{RH},fps=60000/1001,format=rgb24"
+        _bdec[key] = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{b.get('in', 0):.3f}", "-i", b["file"], "-an", "-vf", vf, "-f", "rawvideo", "-"], stdout=subprocess.PIPE)
+        b["_last"] = None
+    buf = _bdec[key].stdout.read(RW * RH * 3)
+    if len(buf) == RW * RH * 3: b["_last"] = np.frombuffer(buf, np.uint8).reshape(RH, RW, 3)
+    return b["_last"]
+def ease_out_back2(x, c1=1.70158): c3 = c1 + 1; return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2
+def _card(im, wmax, hmax):
+    sc = min(wmax / im.width, hmax / im.height); r = im.resize((int(im.width * sc), int(im.height * sc)), Image.LANCZOS).convert("RGBA")
+    m = Image.new("L", r.size, 0); ImageDraw.Draw(m).rounded_rectangle([0, 0, r.width - 1, r.height - 1], radius=int(28 * RW / W), fill=255); r.putalpha(m)
+    return r
+def _cards_frame(b, t, cam):
+    base = cv2.GaussianBlur(cv2.resize(cam, (RW // 4, RH // 4)), (0, 0), 6); base = cv2.resize(base, (RW, RH)).astype(np.float32) * 0.5
+    canvas = Image.fromarray(base.astype(np.uint8)).convert("RGBA"); n = len(b["ims"])
+    if "_cards" not in b: b["_cards"] = [_card(im, RW * (0.62 if n > 1 else 0.8), RH * 0.5) for im in b["ims"]]
+    for i, cd in enumerate(b["_cards"]):
+        tin = b["t0"] + 0.12 + i * 0.35; x = (t - tin) / 0.32
+        if x <= 0: continue
+        sc = max(0.01, ease_out_back2(min(1, x))); ang = ((-6, 5, -3)[i % 3]) if n > 1 else 0
+        im = cd.resize((max(1, int(cd.width * sc)), max(1, int(cd.height * sc))), Image.BICUBIC).rotate(ang, resample=Image.BICUBIC, expand=True)
+        sh = Image.new("RGBA", im.size, (0, 0, 0, 0)); sh.putalpha(im.getchannel("A").point(lambda v: v * 120 // 255)); sh = sh.filter(ImageFilter.GaussianBlur(10))
+        cx = RW / 2 + ((i - (n - 1) / 2) * RW * 0.16 if n > 1 else 0); cy = RH * 0.45 + ((i - (n - 1) / 2) * RH * 0.05 if n > 1 else 0)
+        canvas.alpha_composite(sh, (int(cx - im.width / 2 + 6), int(cy - im.height / 2 + 10))); canvas.alpha_composite(im, (int(cx - im.width / 2), int(cy - im.height / 2)))
+    return np.asarray(canvas.convert("RGB"))
+def broll_frame(t, cam):
+    for b in BROLL:
+        if b["t0"] <= t < b["t1"]:
+            return _video_frame(b, t) if b["type"] == "video" else _cards_frame(b, t, cam)
+    return None
+
+def VFG(g):
+    v = VF.replace(f"scale={W}:{H}", f"scale={RW}:{RH}")
+    st = LIFT[g["item"]]
+    if st:  # exposure lift in S-Log3 space before the grade: ~0.077 of full scale per stop
+        o = int(st * 0.077 * 65535); v = v.replace("format=rgb48le,", f"format=rgb48le,lutrgb=r=val+{o}:g=val+{o}:b=val+{o},", 1)
+    return v
+
 FX = SPEC.get("fx")
 if FX:
     yy, xx = np.mgrid[0:RH, 0:RW]; dd = np.sqrt(((xx - RW / 2) / (RW / 2)) ** 2 + ((yy - RH * 0.45) / (RH / 2)) ** 2)
@@ -409,7 +465,7 @@ enc = subprocess.Popen(["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_f
 fi = 0
 for gi, g in enumerate(segs):
     z0, z1 = ((1.00, 1.03) if ZP[g["item"]] == 0 else (1.08, 1.11))
-    dec = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{g['s']:.3f}", "-i", SRC, "-frames:v", str(g["n"]), "-vf", VF.replace(f"scale={W}:{H}", f"scale={RW}:{RH}"), "-f", "rawvideo", "-"], stdout=subprocess.PIPE)
+    dec = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{g['s']:.3f}", "-i", SRC, "-frames:v", str(g["n"]), "-vf", VFG(g), "-f", "rawvideo", "-"], stdout=subprocess.PIPE)
     for k in range(g["n"]):
         buf = dec.stdout.read(RW * RH * 3)
         if len(buf) < RW * RH * 3: break
@@ -418,6 +474,8 @@ for gi, g in enumerate(segs):
         x0 = (RW - RW / z) / 2; y0 = (RH - RH / z) * 0.40
         img = cv2.warpAffine(fr, np.array([[z, 0, -x0 * z], [0, z, -y0 * z]], np.float32), (RW, RH), flags=cv2.INTER_LANCZOS4) if z > 1.0005 else fr
         bl = cv2.GaussianBlur(img, (0, 0), 1.0); img = cv2.addWeighted(img, 1.35, bl, -0.35, 0)
+        bfr = broll_frame(fi / FPS, img) if BROLL else None
+        if bfr is not None: img = bfr.copy()
         if FX: img = post_fx(img)
         ov = overlay(fi / FPS, img)
         if PREVIEW: ov = cv2.resize(ov, (RW, RH), interpolation=cv2.INTER_AREA); ov[:WM.shape[0], :WM.shape[1]] = np.maximum(ov[:WM.shape[0], :WM.shape[1]], WM) if False else ov[:WM.shape[0], :WM.shape[1]]
