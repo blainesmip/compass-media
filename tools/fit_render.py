@@ -141,7 +141,9 @@ for i in range(1, len(TAGS)):
 for i, tg in enumerate(TAGS):
     nx_ = [u["t"] for u in TAGS[i + 1:] if not ST(u, tg)]; nxt = nx_[0] if nx_ else 1e9
     tg["out"] = min(tg["t"] + tg["dur"], nxt - 0.05, TOTAL - 0.2)
-for tg in TAGS: print("  tag", round(tg["t"], 2), round(tg["out"], 2), tg["handle"], flush=True)
+for tg in TAGS:
+    print("  tag", round(tg["t"], 2), round(tg["out"], 2), tg["handle"], flush=True)
+    if tg["out"] - tg["t"] < 1.5: print(f"  WARNING TAG TOO SHORT TO READ: {tg['handle']} on screen {tg['out'] - tg['t']:.2f}s (needs 1.5 s+; Blaines 18 Nov)", flush=True)
 
 fcap = ImageFont.truetype("RC800.ttf", 120); fanton = ImageFont.truetype("anton.ttf", 130)
 fname = ImageFont.truetype("RC800.ttf", 46); fhandle = ImageFont.truetype("RobotoCond-600.ttf", 38) if False else ImageFont.truetype("RC800.ttf", 36)
@@ -351,7 +353,7 @@ def avoid_faces(tg, t, frame, cx, cy, w, h):
     in which case they drop just under the face."""
     if tg.get("_lock") is not None: return tg["_lock"]
     faces = faces_in(frame) if frame is not None else []
-    m = 30; lo_y, hi_y = h / 2 + 380, CAP_Y - 60 - h / 2
+    m = 30; lo_y, hi_y = h / 2 + 380, CAP_Y - 190 - h / 2
     def box(f): fx, fy, fw, fh = f; return fx - fw * 0.15, fy - fh * 0.35, fx + fw * 1.15, fy + fh * 1.1
     def hit(x, y):
         for f in faces:
@@ -394,7 +396,7 @@ def overlay(t, frame=None):
             if tg.get("side") == "face": cx, cy = ax + im.width / 2 + 24, ay
             elif tg.get("side") == "right": cx, cy = ax + im.width / 2 + 70, ay
             elif tg.get("side") == "left": cx, cy = ax - im.width / 2 - 70, ay
-        cx = min(max(cx, im.width / 2 + 10), W - im.width / 2 - 10); cy = min(max(cy, im.height / 2 + 380), CAP_Y - 60 - im.height / 2)
+        cx = min(max(cx, im.width / 2 + 10), W - im.width / 2 - 10); cy = min(max(cy, im.height / 2 + 380), CAP_Y - 190 - im.height / 2)
         if tg.get("y"): cx, cy = W / 2, tg["y"]
         else: cx, cy = avoid_faces(tg, t, frame, cx, cy, im.width, im.height)
         ov.alpha_composite(im, (int(cx - im.width / 2), int(cy - im.height / 2)))
@@ -441,7 +443,7 @@ BROLL = []
 for b in SPEC.get("broll", []):
     t0_, t1_ = src2out(b["s"]), src2out(b["e"] - 0.001)
     if t0_ is None or t1_ is None: continue
-    d = dict(b); d["t0"], d["t1"] = t0_, t1_ + 0.001
+    d = dict(b); d["t0"], d["t1"] = t0_ - 0.6 / FPS, t1_ + 0.001  # start on the cut frame itself (no 1-frame flash of the new camera shot)
     if d["type"] == "cards": d["ims"] = [Image.open(f).convert("RGB") for f in d["files"]]
     BROLL.append(d); print("  broll", d["type"], round(t0_, 2), round(t1_, 2), d.get("file", d.get("files")), flush=True)
 _bdec = {}

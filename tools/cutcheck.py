@@ -90,10 +90,10 @@ def broll_edges(spec, base, rep):
     for b in spec.get("broll", []):
         if b.get("type") != "video": continue
         cuts, L = reel_cuts(os.path.join(base, b["file"])); dur = b["e"] - b["s"]; i0 = b.get("in", 0); i1 = i0 + dur
-        bad = [c for c in cuts if (0 < c - i0 < 0.25) or (-0.25 < c - i1 < 0.25)]
+        bad = [c for c in cuts if (0 < c - i0 < 0.25) or (0 <= i1 - c < 0.25)]  # starting just before a reel cut, or ending just after one, flashes a few frames of another shot
         if i1 > L: rep.append(f"broll {b['file']} runs past the reel end ({i1:.2f} > {L:.2f})")
         if bad:
-            ok = [c + 0.02 for c in cuts if c + 0.02 + dur <= L and all(not (-0.25 < x - (c + 0.02 + dur) < 0.25) for x in cuts)]
+            ok = [c + 0.02 for c in cuts if c + 0.02 + dur <= L and all(not (0 <= (c + 0.02 + dur) - x < 0.25) for x in cuts)]
             rep.append(f"broll {b['file']} in {i0:.2f}-{i1:.2f} sits next to reel cut(s) {[round(c, 2) for c in bad]} -> clean in-points (start on a cut): {[round(x, 2) for x in ok]}")
 
 if __name__ == "__main__":

@@ -70,6 +70,7 @@ for k, row in enumerate(raw_items):
     for blk in _dl.SequenceMatcher(None, [_nm(x[2]) for x in ws], [_nm(t) for t in toks], autojunk=False).get_matching_blocks():
         for q in range(blk.size): st_[blk.b + q] = ws[blk.a + q][0]; en_[blk.b + q] = ws[blk.a + q][1]
     kn = [i for i, v in enumerate(st_) if v is not None]
+    matched = set(kn)
     if not kn:
         sp0 = ws[0][0] if ws else s + 0.05; sp1 = (ws[-1][1] if ws else e) - 0.1
         st_ = list(np.linspace(max(s, sp0), max(s, sp1), len(toks))); en_ = [x + 0.35 for x in st_]
@@ -84,8 +85,20 @@ for k, row in enumerate(raw_items):
     for i in range(1, len(st_)): st_[i] = max(st_[i], st_[i - 1] + 0.08)
     starts = [max(s, x) - s + t_out for x in st_]
     ends = [min(e, max(x, y + 0.1)) - s + t_out for x, y in zip(en_, st_)]
+    # loser drops only once the winner's name has been SAID: at the end of the matched word (Blaines 18 Nov: no early reveal).
+    _wt = None
+    if win:
+        wi = win[0]
+        while wi + 1 in win: wi += 1  # whole name said (LIL WAYNE: end of WAYNE)
+        _ov = SPEC.get("win_at", {}).get(str(len(timeline)))
+        if _ov is not None: _wt = min(e, _ov) - s + t_out
+        elif wi in matched: _wt = ends[wi]
+        else:
+            later = [j for j in matched if j > wi]
+            _wt = ends[later[0]] if later else (e - 0.25 - s + t_out)
+        print(f"  WIN item {len(timeline)} '{toks[wi]}' drop at src {_wt - t_out + s:.2f} ({'matched' if wi in matched else 'NOT MATCHED: check by ear'})", flush=True)
     timeline.append(dict(s=s, n=n, d=d, t0=t_out, role=role, cx=view[0], cy=view[1], z0=z0, z1=z1, toks=toks, starts=starts, ends=ends,
-                         win=starts[win[0]] if win else None))
+                         win=_wt))
     t_out += d
 TOTAL = t_out; print(f"total {TOTAL:.2f}s", flush=True)
 
@@ -180,7 +193,7 @@ def cap_layer(it, i):
     f = fcap
     while f.getlength(word) > 1000: f = ImageFont.truetype("RC800.ttf", f.size - 6)
     L = Image.new("RGBA", (W, 260), (0, 0, 0, 0)); x = (W - f.getlength(word)) / 2
-    ImageDraw.Draw(L).text((x, 130), word, font=f, fill=col + (255,), anchor="lm", stroke_width=SPEC.get("cap_stroke", 7), stroke_fill=(0, 0, 0, 255))
+    ImageDraw.Draw(L).text((x, 130), word, font=f, fill=col + (255,), anchor="lm", stroke_width=SPEC.get("cap_stroke", 3), stroke_fill=(0, 0, 0, 255))
     cap_cache[key] = L; return L
 
 SLOTX = {"L": 290, "R": 790}
@@ -193,7 +206,7 @@ def overlay(t):
     def put(icon, cx, sc):
         if sc <= 0.01: return
         im = icon.resize((max(1, int(icon.width * sc)), max(1, int(icon.height * sc))), Image.LANCZOS)
-        top = 1020 + 64 + (icon.height - im.height) // 2
+        top = 1020 + 64 + SPEC.get("icon_drop", 150) + (icon.height - im.height) // 2
         ov.alpha_composite(im, (int(cx - im.width / 2), int(top)))
     for e in entries:
         n, t_in, t_o = e["n"], e["tin"], e["tout"]
