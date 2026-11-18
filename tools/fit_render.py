@@ -50,9 +50,9 @@ for k, row in enumerate(SPEC["items"]):
     ws = [x for x in words if s - 0.05 <= x[0] < e]
     # align tokens to heard words
     a = [norm(x[2]) for x in ws]; b = [norm(t) for t in toks]
-    st = [None] * len(toks)
+    st = [None] * len(toks); en = [None] * len(toks)
     for blk in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
-        for q in range(blk.size): st[blk.b + q] = ws[blk.a + q][0]
+        for q in range(blk.size): st[blk.b + q] = ws[blk.a + q][0]; en[blk.b + q] = ws[blk.a + q][1]
     known = [i for i, v in enumerate(st) if v is not None]
     if not known: st = list(np.linspace(s + 0.05, e - 0.2, len(toks)))
     else:
@@ -69,7 +69,8 @@ for k, row in enumerate(SPEC["items"]):
         last = (k == len(SPEC["items"]) - 1 and pi == len(pieces) - 1)
         segs.append(dict(s=ps, e=pe, n=n, d=d, t0=t_out, item=k, last=last))
         t_out += d
-    SPEC["items"][k] = dict(s=s, e=e, toks=toks, st=st, brk=BRK)
+    en = [min(e, y if y is not None else x + 0.3) for x, y in zip(st, en)]
+    SPEC["items"][k] = dict(s=s, e=e, toks=toks, st=st, en=en, brk=BRK)
 TOTAL = t_out; print(f"total {TOTAL:.2f}s, {len(segs)} segments", flush=True)
 
 def src2out(ts):
@@ -86,11 +87,11 @@ for k, it in enumerate(SPEC["items"]):
         if to is not None: CAPS.append((to, tok))
 CAPS.sort()
 # group single words into short phrases (screenshot style): <=3 words / 18 chars, break on pauses or item change
-item_of = []
+item_of = []; TEND = {}
 for k, it in enumerate(SPEC["items"]):
     for ii, (tok, ts) in enumerate(zip(it["toks"], it["st"])):
         to = src2out(max(ts, it["s"]))
-        if to is not None: item_of.append((to, tok, k, ii in it["brk"]))
+        if to is not None: item_of.append((to, tok, k, ii in it["brk"])); TEND[(k, to)] = src2out(min(it["en"][ii], it["e"] - 0.01)) or to + 0.3
 item_of.sort()
 PHR = []
 MAXW, MAXC = SPEC.get("cap_words", 4), SPEC.get("cap_chars", 24)
@@ -108,7 +109,7 @@ for k, grp in groupby(item_of, key=lambda x: x[2]):
         cur.append((to, tok))
     if cur: chunks.append(cur)
     if forced:
-        for c in chunks: PHR.append(dict(t=c[0][0], w=[x[1] for x in c], k=k))
+        for c in chunks: PHR.append(dict(t=c[0][0], w=[x[1] for x in c], k=k, e=TEND.get((k, c[-1][0]), c[-1][0] + 0.3)))
         continue
     # no orphans: fold single-word chunks into a neighbour
     i = 0
@@ -120,7 +121,7 @@ for k, grp in groupby(item_of, key=lambda x: x[2]):
             if len(" ".join(c[1] for c in merged)) <= MAXC + 6:
                 chunks[min(i, j)] = merged; del chunks[max(i, j)]; i = max(0, i - 1); continue
         i += 1
-    for c in chunks: PHR.append(dict(t=c[0][0], w=[x[1] for x in c], k=k))
+    for c in chunks: PHR.append(dict(t=c[0][0], w=[x[1] for x in c], k=k, e=TEND.get((k, c[-1][0]), c[-1][0] + 0.3)))
 item_end = {}
 for g in segs: item_end[g["item"]] = g["t0"] + g["d"]
 CAP_END = []
@@ -130,13 +131,15 @@ for k, it in enumerate(SPEC["items"]):
 # tags on output timeline
 TAGS = []
 for tg_ in SPEC.get("tags", []):
-    ts, logo, name, handle, ver = tg_[:5]; anc = tg_[5] if len(tg_) > 5 else None; dur = tg_[6] if len(tg_) > 6 and tg_[6] else SPEC.get("tag_dur", 2.4); side = tg_[7] if len(tg_) > 7 else None; fol = tg_[8] if len(tg_) > 8 else None
+    ts, logo, name, handle, ver = tg_[:5]; anc = tg_[5] if len(tg_) > 5 else None; dur = tg_[6] if len(tg_) > 6 and tg_[6] else SPEC.get("tag_dur", 2.4); side = tg_[7] if len(tg_) > 7 else None; fol = tg_[8] if len(tg_) > 8 else None; ty = tg_[9] if len(tg_) > 9 else None
     to = src2out(ts)
-    if to is not None: TAGS.append(dict(t=to - 0.05, logo=logo, name=name, handle=handle, ver=ver, anchor=anc, dur=dur, side=side, follow=fol))
+    if to is not None: TAGS.append(dict(t=to - 0.05, logo=logo, name=name, handle=handle, ver=ver, anchor=anc, dur=dur, side=side, follow=fol, y=ty))
 TAGS.sort(key=lambda x: x["t"])
-for i in range(1, len(TAGS)): TAGS[i]["t"] = max(TAGS[i]["t"], TAGS[i - 1]["t"] + 1.3)
+ST = lambda a, b: a.get("y") and b.get("y")  # stacked pair (fixed y): shown together
+for i in range(1, len(TAGS)):
+    if not ST(TAGS[i], TAGS[i - 1]): TAGS[i]["t"] = max(TAGS[i]["t"], TAGS[i - 1]["t"] + 1.3)
 for i, tg in enumerate(TAGS):
-    nxt = TAGS[i + 1]["t"] if i + 1 < len(TAGS) else 1e9
+    nx_ = [u["t"] for u in TAGS[i + 1:] if not ST(u, tg)]; nxt = nx_[0] if nx_ else 1e9
     tg["out"] = min(tg["t"] + tg["dur"], nxt - 0.05, TOTAL - 0.2)
 for tg in TAGS: print("  tag", round(tg["t"], 2), round(tg["out"], 2), tg["handle"], flush=True)
 
@@ -217,7 +220,7 @@ def phr_layer(words_):
     L = Image.new("RGBA", (W, 240), (0, 0, 0, 0)); sh = Image.new("RGBA", (W, 240), (0, 0, 0, 0))
     ds = ImageDraw.Draw(sh); d = ImageDraw.Draw(L); x = (W - tw) / 2
     for t_, c_ in parts:
-        d.text((x, 120), t_, font=f, fill=c_ + (255,), anchor="lm"); x += f.getlength(t_) + sp
+        d.text((x, 120), t_, font=f, fill=c_ + (255,), anchor="lm", stroke_width=SPEC.get("cap_stroke", 0), stroke_fill=(0, 0, 0, 255)); x += f.getlength(t_) + sp
     phr_cache[key] = L; return L
 
 cap_cache = {}
@@ -332,6 +335,44 @@ def track(tg, t, frame):
         else: st["lost"] = True
     st["g"] = g; return st["sm"]
 
+
+_FDET = None
+def faces_in(frame):
+    global _FDET
+    if frame is None: return []
+    if _FDET is None: _FDET = cv2.FaceDetectorYN.create("yunet.onnx", "", (540, 960), 0.6)
+    sm = cv2.resize(frame, (540, 960)); _, f = _FDET.detect(cv2.cvtColor(sm, cv2.COLOR_RGB2BGR))
+    if f is None: return []
+    k = W / 540.0
+    return [(r[0] * k, r[1] * k, r[2] * k, r[3] * k) for r in f]
+def avoid_faces(tg, t, frame, cx, cy, w, h):
+    """Place each tag ONCE when it first appears, then lock it there (no jumping).
+    Face tags sit just under that person's face; other tags stay in the middle unless that covers a face,
+    in which case they drop just under the face."""
+    if tg.get("_lock") is not None: return tg["_lock"]
+    faces = faces_in(frame) if frame is not None else []
+    m = 30; lo_y, hi_y = h / 2 + 380, CAP_Y - 60 - h / 2
+    def box(f): fx, fy, fw, fh = f; return fx - fw * 0.15, fy - fh * 0.35, fx + fw * 1.15, fy + fh * 1.1
+    def hit(x, y):
+        for f in faces:
+            fx0, fy0, fx1, fy1 = box(f)
+            if x + w / 2 > fx0 - m and x - w / 2 < fx1 + m and y + h / 2 > fy0 - m and y - h / 2 < fy1 + m: return f
+        return None
+    if tg.get("side") == "face" and faces:
+        ax = tg["anchor"][0] if tg.get("anchor") else W / 2
+        f = min(faces, key=lambda f: abs(f[0] + f[2] / 2 - ax)); fx0, fy0, fx1, fy1 = box(f)
+        cx, cy = (fx0 + fx1) / 2, fy1 + m + h / 2
+    else:
+        f = hit(cx, cy)
+        if f is not None:
+            fx0, fy0, fx1, fy1 = box(f); cy = fy1 + m + h / 2
+    cx = min(max(cx, w / 2 + 10), W - w / 2 - 10); cy = min(max(cy, lo_y), hi_y)
+    tg["_lock"] = (cx, cy); return cx, cy
+
+
+_LG = Image.open("compass_white.png").convert("RGBA"); _LW = int(_LG.width * 96 / _LG.height)
+_LG = _LG.resize((_LW, 96), Image.LANCZOS); _LG.putalpha(_LG.getchannel("A").point(lambda v: int(v * 0.7)))
+
 def overlay(t, frame=None):
     ov = hook_layer(t)
     for tg in TAGS:
@@ -354,11 +395,16 @@ def overlay(t, frame=None):
             elif tg.get("side") == "right": cx, cy = ax + im.width / 2 + 70, ay
             elif tg.get("side") == "left": cx, cy = ax - im.width / 2 - 70, ay
         cx = min(max(cx, im.width / 2 + 10), W - im.width / 2 - 10); cy = min(max(cy, im.height / 2 + 380), CAP_Y - 60 - im.height / 2)
+        if tg.get("y"): cx, cy = W / 2, tg["y"]
+        else: cx, cy = avoid_faces(tg, t, frame, cx, cy, im.width, im.height)
         ov.alpha_composite(im, (int(cx - im.width / 2), int(cy - im.height / 2)))
     ph = [p_ for p_ in PHR if p_["t"] <= t]
     if ph:
         p_ = ph[-1]; it_end = item_end[p_["k"]]
-        if t < it_end: ov.alpha_composite(phr_layer(p_["w"]), (0, CAP_Y - 120))
+        nx = [q["t"] for q in PHR if q["t"] > p_["t"]]; nx = nx[0] if nx else 1e9
+        hold = min(it_end, nx if nx - p_["e"] < 0.5 else p_["e"] + 0.3)
+        if t < hold: ov.alpha_composite(phr_layer(p_["w"]), (0, CAP_Y - 120))
+    ov.alpha_composite(_LG, (W - 60 - _LW, 230))
     return np.asarray(ov)
 
 # ---- audio ----

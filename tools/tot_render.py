@@ -11,12 +11,13 @@ SRC = SPEC["src"]; LUT = "B-rich.cube"; FPS = 60000 / 1001; W, H = 1080, 1920
 MINT = (12, 247, 192)
 NAMEW = {"J._COLE", "DRAKE", "KENDRICK", "KANYE", "WEST", "TRAVIS", "SCOTT", "PLAYBOI", "CARTI", "FRANK", "OCEAN", "WEEKND", "TYLER",
          "CREATOR", "BRENT", "FAIYAZ", "BRYSON", "TILLER", "TORY", "LANEZ", "DON", "TOLIVER", "YOUNG", "THUG", "STEVE", "LACEY"}
+NAMEW |= set(SPEC.get("names", []))
 words = json.load(open(SPEC["words"]))
 det = cv2.FaceDetectorYN.create("yunet.onnx", "", (540, 960), 0.55)
 
 def grab(t):
     raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", SRC, "-frames:v", "1", "-vf",
-                          f"format=rgb48le,lut3d={LUT}:interp=tetrahedral,format=rgb24", "-f", "rawvideo", "-"], capture_output=True).stdout
+                          f"scale=1080:1920:flags=lanczos,format=rgb48le,lut3d={LUT}:interp=tetrahedral,eq=gamma=1.06:contrast=1.08:saturation=1.12,curves=master='0/0 0.12/0.08 0.5/0.52 0.85/0.9 1/1',unsharp=5:5:0.6,format=rgb24", "-f", "rawvideo", "-"], capture_output=True).stdout
     return np.frombuffer(raw, np.uint8).reshape(H, W, 3)
 
 def people(t):
@@ -38,18 +39,19 @@ def people(t):
 w = wave.open(SPEC["wav"]); A = np.frombuffer(w.readframes(w.getnframes()), np.int16).reshape(-1, 2).astype(np.float32) / 32768
 SR = 48000; mono = A.mean(1)
 def trim(s, e, lo, hi):
-    a0, a1 = max(lo, s - 0.12), min(hi, e + 0.12)
+    a0, a1 = max(lo, s - 0.18), min(hi, e + 0.25)
     seg = mono[int(a0 * SR):int(a1 * SR)]; fr = int(0.01 * SR)
     db = np.array([20 * np.log10(np.sqrt((seg[i:i + fr] ** 2).mean()) + 1e-6) for i in range(0, len(seg) - fr, fr)])
     on = np.where(db > db.max() - 26)[0]
     if not len(on): return s, e
-    return max(a0, a0 + on[0] * 0.01 - 0.05), min(a1, a0 + (on[-1] + 1) * 0.01 + 0.10)
+    return max(a0, a0 + on[0] * 0.01 - 0.12), min(a1, a0 + (on[-1] + 1) * 0.01 + 0.18)
 
 # ---- timeline ----
 raw_items = SPEC["items"]; timeline = []; t_out = 0.0; last_view = None
-for k, (s, e, role, cap) in enumerate(raw_items):
+for k, row in enumerate(raw_items):
+    s, e, role, cap = row[:4]; keep = len(row) > 4 and row[4] == "keep"
     lo = raw_items[k - 1][1] if k else 0; hi = raw_items[k + 1][0] if k + 1 < len(raw_items) else e + 0.3
-    s, e = trim(s, e, max(lo, s - 0.12), min(hi, e + 0.12))
+    if not keep: s, e = trim(s, e, max(lo, s - 0.18), min(hi, e + 0.25))
     n = int(round((e - s) * FPS)); d = n / FPS
     cino, guests = people(s + d / 2)
     if role == "A" and guests: view = (guests[0]["cx"], guests[0]["cy"])
@@ -58,16 +60,31 @@ for k, (s, e, role, cap) in enumerate(raw_items):
     elif guests: view = (guests[0]["cx"], guests[0]["cy"])
     else: view = last_view or (W / 2, 820)
     if role == "A": last_view = view
-    z0, z1 = (1.15, 1.18) if role != "A" else ((1.40, 1.56) if d > 1.6 else (1.45, 1.50))
+    z0, z1 = (1.15, 1.17) if role != "A" else (1.26, 1.29)
     toks = cap.split(); win = [i for i, t in enumerate(toks) if t.endswith("*") or t.endswith("*?")]
     toks = [t.replace("*", "") for t in toks]
     ws = [x for x in words if s - 0.05 <= x[0] < e]
-    if len(ws) >= len(toks): starts = [ws[int(i * len(ws) / len(toks))][0] for i in range(len(toks))]
-    else:
+    import difflib as _dl, re as _re
+    _nm = lambda t: _re.sub(r"[^a-z0-9]", "", t.lower())
+    st_ = [None] * len(toks); en_ = [None] * len(toks)
+    for blk in _dl.SequenceMatcher(None, [_nm(x[2]) for x in ws], [_nm(t) for t in toks], autojunk=False).get_matching_blocks():
+        for q in range(blk.size): st_[blk.b + q] = ws[blk.a + q][0]; en_[blk.b + q] = ws[blk.a + q][1]
+    kn = [i for i, v in enumerate(st_) if v is not None]
+    if not kn:
         sp0 = ws[0][0] if ws else s + 0.05; sp1 = (ws[-1][1] if ws else e) - 0.1
-        starts = list(np.linspace(max(s, sp0), max(s, sp1), len(toks)))
-    starts = [max(s, x) - s + t_out for x in starts]; starts[0] = t_out
-    timeline.append(dict(s=s, n=n, d=d, t0=t_out, role=role, cx=view[0], cy=view[1], z0=z0, z1=z1, toks=toks, starts=starts,
+        st_ = list(np.linspace(max(s, sp0), max(s, sp1), len(toks))); en_ = [x + 0.35 for x in st_]
+    else:
+        for i in range(len(toks)):
+            if st_[i] is None:
+                lo = max([j for j in kn if j < i], default=None); hi = min([j for j in kn if j > i], default=None)
+                if lo is None: st_[i] = max(s, st_[hi] - 0.25 * (hi - i))
+                elif hi is None: st_[i] = en_[lo] + 0.05 + 0.25 * (i - lo - 1)
+                else: st_[i] = en_[lo] + (st_[hi] - en_[lo]) * (i - lo) / (hi - lo)
+                en_[i] = st_[i] + 0.3
+    for i in range(1, len(st_)): st_[i] = max(st_[i], st_[i - 1] + 0.08)
+    starts = [max(s, x) - s + t_out for x in st_]
+    ends = [min(e, max(x, y + 0.1)) - s + t_out for x, y in zip(en_, st_)]
+    timeline.append(dict(s=s, n=n, d=d, t0=t_out, role=role, cx=view[0], cy=view[1], z0=z0, z1=z1, toks=toks, starts=starts, ends=ends,
                          win=starts[win[0]] if win else None))
     t_out += d
 TOTAL = t_out; print(f"total {TOTAL:.2f}s", flush=True)
@@ -130,13 +147,17 @@ def make_title():
         d.rectangle([x0, y, x0 + wd, y + rh], fill=bg + (255,)); d.text((wmax / 2, y + rh / 2 + 2), t, font=f, fill=(0, 0, 0, 255), anchor="mm")
     return L
 TITLE = make_title(); T_HOLD, T_ZIP = 0.6, 0.26; TOP = 215; HH = TITLE.height
-BIG = (1.0, TOP + HH / 2); SMALL = (0.72, TOP + HH * 0.72 / 2)
+TS = SPEC.get('title_scale', 1.0); T_OFF = SPEC.get('title_off', 1e9)
+BIG = (1.0 * TS, TOP + HH * TS / 2); SMALL = (0.72 * TS, TOP + HH * 0.72 * TS / 2)
+if SPEC.get('title_static'): BIG = SMALL
 def title_state(t):
     if t <= T_HOLD: return BIG
     x = min(1, (t - T_HOLD) / T_ZIP); x = 4 * x ** 3 if x < 0.5 else 1 - (-2 * x + 2) ** 3 / 2
     return (BIG[0] + (SMALL[0] - BIG[0]) * x, BIG[1] + (SMALL[1] - BIG[1]) * x)
 title_cache = {}
+EMPTY_T = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 def title_layer(t):
+    if t >= T_OFF: return EMPTY_T
     sc, cy = title_state(t); key = (round(sc, 3), round(cy))
     if key not in title_cache:
         im = TITLE.resize((int(TITLE.width * sc), int(TITLE.height * sc)), Image.LANCZOS)
@@ -159,11 +180,14 @@ def cap_layer(it, i):
     f = fcap
     while f.getlength(word) > 1000: f = ImageFont.truetype("RC800.ttf", f.size - 6)
     L = Image.new("RGBA", (W, 260), (0, 0, 0, 0)); x = (W - f.getlength(word)) / 2
-    s = Image.new("RGBA", (W, 260), (0, 0, 0, 0)); ImageDraw.Draw(s).text((x + 4, 134), word, font=f, fill=(0, 0, 0, 200), anchor="lm", stroke_width=6, stroke_fill=(0, 0, 0, 200))
-    L = Image.alpha_composite(s.filter(ImageFilter.GaussianBlur(8)), L); ImageDraw.Draw(L).text((x, 130), word, font=f, fill=col + (255,), anchor="lm")
+    ImageDraw.Draw(L).text((x, 130), word, font=f, fill=col + (255,), anchor="lm", stroke_width=SPEC.get("cap_stroke", 7), stroke_fill=(0, 0, 0, 255))
     cap_cache[key] = L; return L
 
 SLOTX = {"L": 290, "R": 790}
+
+_LG = Image.open("compass_white.png").convert("RGBA"); _LW = int(_LG.width * 96 / _LG.height)
+_LG = _LG.resize((_LW, 96), Image.LANCZOS); _LG.putalpha(_LG.getchannel("A").point(lambda v: int(v * 0.7)))
+
 def overlay(t):
     ov = title_layer(t).copy()
     def put(icon, cx, sc):
@@ -182,7 +206,11 @@ def overlay(t):
     for it in timeline:
         if it["t0"] <= t < it["t0"] + it["d"]:
             ks = [i for i, st in enumerate(it["starts"]) if st <= t]
-            if ks: ov.alpha_composite(cap_layer(it, ks[-1]), (0, 960 - 130))
+            if ks:
+                i = ks[-1]; nx = it["starts"][i + 1] if i + 1 < len(it["starts"]) else it["t0"] + it["d"]
+                hold = nx if nx - it["ends"][i] < 0.5 else it["ends"][i] + 0.3
+                if t < hold: ov.alpha_composite(cap_layer(it, i), (0, 960 - 130))
+    ov.alpha_composite(_LG, (W - 60 - _LW, 230))
     return np.asarray(ov)
 
 # ---- audio ----
@@ -219,7 +247,7 @@ enc = subprocess.Popen(["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_f
 fi = 0
 for it in timeline:
     dec = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{it['s']:.3f}", "-i", SRC, "-frames:v", str(it["n"]), "-vf",
-                            f"format=rgb48le,lut3d={LUT}:interp=tetrahedral,format=rgb24", "-f", "rawvideo", "-"], stdout=subprocess.PIPE)
+                            f"scale=1080:1920:flags=lanczos,format=rgb48le,lut3d={LUT}:interp=tetrahedral,eq=gamma=1.06:contrast=1.08:saturation=1.12,curves=master='0/0 0.12/0.08 0.5/0.52 0.85/0.9 1/1',unsharp=5:5:0.6,format=rgb24", "-f", "rawvideo", "-"], stdout=subprocess.PIPE)
     for k in range(it["n"]):
         buf = dec.stdout.read(W * H * 3)
         if len(buf) < W * H * 3: break
