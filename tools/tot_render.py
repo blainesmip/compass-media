@@ -61,6 +61,7 @@ for k, row in enumerate(raw_items):
     else: view = last_view or (W / 2, 820)
     if role == "A": last_view = view
     z0, z1 = (1.15, 1.17) if role != "A" else (1.26, 1.29)
+    if SPEC.get("no_zoom", True): z0 = z1 = 1.0  # Blaines 19 Nov: he zooms in camera, never zoom in edit
     toks = cap.split(); win = [i for i, t in enumerate(toks) if t.endswith("*") or t.endswith("*?")]
     toks = [t.replace("*", "") for t in toks]
     ws = [x for x in words if s - 0.05 <= x[0] < e]

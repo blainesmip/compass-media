@@ -513,6 +513,7 @@ enc = subprocess.Popen(["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_f
 fi = 0
 for gi, g in enumerate(segs):
     z0, z1 = ((1.00, 1.03) if ZP[g["item"]] == 0 else (1.08, 1.11))
+    if SPEC.get("no_zoom", True): z0 = z1 = 1.0  # Blaines 19 Nov: he zooms in camera, never zoom in edit
     dec = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{g['s']:.3f}", "-i", SRC, "-frames:v", str(g["n"]), "-vf", VFG(g), "-f", "rawvideo", "-"], stdout=subprocess.PIPE)
     for k in range(g["n"]):
         buf = dec.stdout.read(RW * RH * 3)
