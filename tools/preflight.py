@@ -148,6 +148,9 @@ ref_l = lvl(items[-1][0], le); fr = db[int((le - 1.5) * 100):int(le * 100)]
 hot = np.where(fr > ref_l - 15)[0]
 room = (len(fr) - 1 - hot[-1]) / 100 if len(hot) else 1.5
 if room < 0.25: flag('ENDING', len(items) - 1, f'only {room:.2f}s of quiet before the end - the last word may be clipped; leave ~0.5 s of room')
+HARD_END = [x for x in after if x[0] < le - 0.02 and x[1] > le + 0.05]
+if HARD_END: flag('ENDING', len(items) - 1, f'CLIPPED: "{HARD_END[0][2]}" runs {HARD_END[0][1]-le:+.2f}s past the end')
+if post and post[0][0] < le + 0.15: HARD_END.append(post[0])
 if post and post[0][0] < le + 0.4:
     flag('ENDING', len(items) - 1, f'next speech starts {post[0][0]-le:+.2f}s after the end: "{" ".join(x[2] for x in post)}" (new question? cut before it)')
 
@@ -165,3 +168,10 @@ if not TOT:
         if ends_in < 3.0: flag('FIT', -1, f'tag {tg[3]} appears in the last {ends_in:.1f}s - move it to where the item is first shown')
 
 print(f'== {len(flags)} flag(s)' + ('' if flags else ' - clean'))
+
+# 23 Nov 2026: "backgrounds" was clipped on Effing Problem after an ENDING flag was waved off.
+# A word running past the end, or speech within 0.15 s of it, now blocks the render unless an ear-probe
+# confirmed it is safe and the spec says "ending_ok": true.
+if HARD_END and not S.get('ending_ok'):
+    print('BLOCKED: last word runs past the end (or speech right after it). Extend the end or ear-probe and set "ending_ok": true')
+    sys.exit(1)
