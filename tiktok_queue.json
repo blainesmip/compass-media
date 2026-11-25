@@ -1,5 +1,5 @@
 {
- "note": "TikTok plan (Blaines, 25 Nov 2026): max 2 a day. 19:00 = next unposted item in tot_order. 13:00 = next unposted item in other_order (fits and brands), skipped on a day a news TikTok goes out. Never put the All Talk videos on TikTok. New edits get appended to the right list.",
+ "note": "TikTok plan (Blaines, 25 Nov 2026): max 2 a day. 19:00 = next unposted item in tot_order. 13:00 = next unposted item in other_order (fit checks, plus the All Talk brand breakdown when it's ready; no other brand breakdowns on TikTok), skipped on a day a news TikTok goes out.",
  "items": [
   {
    "ig_post_id": "2786615f-6070-40c7-8804-46cdff925087",
@@ -189,14 +189,9 @@
   "tot14_saraya_tt"
  ],
  "other_order": [
-  "brand03_sycamore_tt",
-  "brand07_effing_tt",
   "fit10_jen_tt",
-  "brand04_amari_tt",
   "fit15b_staysteezy_tt",
-  "brand01b_la8ency_tt",
   "fit01_tellz_tt",
-  "brand01ac_la8ency_tt",
   "fit11_banga_tt",
   "fit05_sauce_tt",
   "fit15a_filipe_tt",
