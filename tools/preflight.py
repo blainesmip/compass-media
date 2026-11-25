@@ -167,6 +167,35 @@ if not TOT:
         ends_in = sum(max(0, it[1] - max(it[0], t)) for it in items)
         if ends_in < 3.0: flag('FIT', -1, f'tag {tg[3]} appears in the last {ends_in:.1f}s - move it to where the item is first shown')
 
+
+# 25 Nov 2026: "fit" / "quickly" cut mid-word on the All Talk fit check OPENING item - only the final end was hard-checked.
+# Waveform check on EVERY cut edge (start and end of each non-joined item): the 10 ms envelope at the cut must be
+# quiet relative to that item's speech, and no transcribed word may straddle it. Any failure blocks the render.
+EDGE_BAD = []
+for i, it in enumerate(items):
+    s, e = it[0], it[1]; ref = lvl(s, e)
+    nxt = items[i + 1][0] if i + 1 < len(items) else None
+    prv = items[i - 1][1] if i else None
+    for edge, kind, joined in ((e, 'end', nxt is not None and abs(nxt - e) < 0.02), (s, 'start', prv is not None and abs(prv - s) < 0.02)):
+        if joined: continue
+        win = db[int((edge - 0.04) * 100):int((edge + 0.04) * 100)]
+        hot = len(win) and float(win.max()) > ref - 14
+        ws = tr(edge - 1.0, edge + 1.0)
+        strad = [x for x in ws if x[0] < edge - 0.03 and x[1] > edge + 0.03]
+        strad = [x for x in strad if len(win) and float(win.max()) > ref - 18]
+        if hot or strad:
+            # suggest the nearest quiet point (60 ms below ref-18) moving outward from the item
+            sug = None
+            rng = np.arange(edge, edge + 0.8, 0.01) if kind == 'end' else np.arange(edge, edge - 0.8, -0.01)
+            for t in rng:
+                if float(db[int((t - 0.03) * 100):int((t + 0.03) * 100)].max()) < ref - 18: sug = round(float(t), 2); break
+            msg = f'{kind} {edge:.2f} cuts through audio (peak {float(win.max()) if len(win) else 0:.0f} dB vs speech {ref:.0f})' + \
+                  (f', word "{strad[0][2]}" {strad[0][0]:.2f}-{strad[0][1]:.2f}' if strad else '') + (f' -> try {sug}' if sug else '')
+            flag('EDGE', i, msg); EDGE_BAD.append((i, kind, edge, sug))
+if EDGE_BAD and not S.get('edges_ok'):
+    print('BLOCKED: a cut lands mid-word. Move it to the suggested quiet point (or ear-probe and set "edges_ok": true)')
+    sys.exit(1)
+
 print(f'== {len(flags)} flag(s)' + ('' if flags else ' - clean'))
 
 # 23 Nov 2026: "backgrounds" was clipped on Effing Problem after an ENDING flag was waved off.
