@@ -1,5 +1,5 @@
 {
- "note": "TikTok 1-a-day (Compass, from 23 Nov 2026). Daily task picks one unposted item and posts tiktok_url at 18:00 London. format weights: brand 2, thisorthat 1.5, fit 1. Set posted_tiktok when used.",
+ "note": "TikTok plan (Blaines, 25 Nov 2026): max 2 a day. 19:00 = next unposted item in tot_order. 13:00 = next unposted item in other_order (fits and brands), skipped on a day a news TikTok goes out. Never put the All Talk videos on TikTok. New edits get appended to the right list.",
  "items": [
   {
    "ig_post_id": "2786615f-6070-40c7-8804-46cdff925087",
@@ -22,7 +22,7 @@
    "ig_time": "2026-11-23T20:00Z",
    "tiktok_url": "https://raw.githubusercontent.com/blainesmip/compass-media/main/media/tot04_well_tt.mp4",
    "tiktok_caption": "Last man standing? Pt. 4 — can anyone stop Kanye? 👀\n\n#thisorthat #kanye #hiphop\n@cino9hunid_",
-   "posted_tiktok": null,
+   "posted_tiktok": "2026-11-25 19:00 ae686675",
    "format": "thisorthat"
   },
   {
@@ -177,5 +177,29 @@
    "posted_tiktok": null,
    "format": "thisorthat"
   }
+ ],
+ "tot_order": [
+  "tot04_well_tt",
+  "tot13_ivan_tt",
+  "tot07_alina_tt",
+  "tot12_jack_tt",
+  "tot05_brandon_tt",
+  "tot08_mariam_tt",
+  "tot01_montreal_tt",
+  "tot14_saraya_tt"
+ ],
+ "other_order": [
+  "brand03_sycamore_tt",
+  "brand07_effing_tt",
+  "fit10_jen_tt",
+  "brand04_amari_tt",
+  "fit15b_staysteezy_tt",
+  "brand01b_la8ency_tt",
+  "fit01_tellz_tt",
+  "brand01ac_la8ency_tt",
+  "fit11_banga_tt",
+  "fit05_sauce_tt",
+  "fit15a_filipe_tt",
+  "fit04_ronan_tt"
  ]
 }
