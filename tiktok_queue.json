@@ -176,6 +176,22 @@
    "tiktok_caption": "Last man standing? Pt. 11 — from 50 Cent to Drake 👀\n\n#thisorthat #drake #kanye #hiphop\n@cino9hunid_",
    "posted_tiktok": null,
    "format": "thisorthat"
+  },
+  {
+   "ig_post_id": "dd039263-01c3-4309-be11-247349ce50de",
+   "ig_time": "2026-11-26T09:00Z",
+   "tiktok_url": "https://raw.githubusercontent.com/blainesmip/compass-media/main/media/brand10_alltalk_tt.mp4",
+   "tiktok_caption": "Brand breakdown with @zakaria_c11 and @j.ame.c of @alltalk_archived at @sightedcon\n\n#streetwear #ukfashion #clothingbrand\n@cino9hunid_",
+   "posted_tiktok": null,
+   "format": "brand"
+  },
+  {
+   "ig_post_id": "7a3c8e06-5a96-4c78-85e9-ef0bf5bb9c32",
+   "ig_time": "2026-11-30T09:00Z",
+   "tiktok_url": "https://raw.githubusercontent.com/blainesmip/compass-media/main/media/fit13_alltalk_tt.mp4",
+   "tiktok_caption": "@sightedcon fit check with @zakaria_c11 and @j.ame.c of @alltalk_archived | Rate it 1–10 👇\n\nZak\nJacket: thrifted\nChain: @alltalk_archived\nBoots: Striker\n\nJames\nJacket: @alltalk_archived, unreleased\nJeans: @zara\nShoes: @newbalance\n\n#fitcheck #streetwear #ukfashion #outfitcheck\n@cino9hunid_",
+   "posted_tiktok": null,
+   "format": "fit"
   }
  ],
  "tot_order": [
@@ -189,12 +205,14 @@
   "tot14_saraya_tt"
  ],
  "other_order": [
+  "brand10_alltalk_tt",
   "fit10_jen_tt",
   "fit15b_staysteezy_tt",
   "fit01_tellz_tt",
   "fit11_banga_tt",
   "fit05_sauce_tt",
   "fit15a_filipe_tt",
-  "fit04_ronan_tt"
+  "fit04_ronan_tt",
+  "fit13_alltalk_tt"
  ]
 }
